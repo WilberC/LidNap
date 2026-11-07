@@ -10,11 +10,11 @@ AGENT="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Info.plist "$APP/Contents/Info.plist"
-cp main.swift Guards.swift "$APP/Contents/Resources/"
+cp main.swift Guards.swift Session.swift "$APP/Contents/Resources/"
 cp setup-permissions.sh failsafe.sh "$APP/Contents/Resources/"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-swiftc -O -o "$APP/Contents/MacOS/LidAwake" main.swift Guards.swift \
+swiftc -O -o "$APP/Contents/MacOS/LidAwake" main.swift Guards.swift Session.swift \
     -F /System/Library/PrivateFrameworks -framework DisplayServices
 
 codesign --force --sign - "$APP"
