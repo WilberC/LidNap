@@ -34,11 +34,11 @@ exit "${FAKE_PMSET_STATUS:-0}"
 EOF
 chmod +x "$TMP/pmset"
 
-# A live process whose executable is named LidAwake. Copying /bin/sleep would
+# A live process whose executable is named LidNap. Copying /bin/sleep would
 # break its code signature, so build a tiny binary instead.
 printf '#include <unistd.h>\nint main(void) { sleep(600); return 0; }\n' > "$TMP/sleeper.c"
-cc -o "$TMP/LidAwake" "$TMP/sleeper.c"
-"$TMP/LidAwake" &
+cc -o "$TMP/LidNap" "$TMP/sleeper.c"
+"$TMP/LidNap" &
 FAKE_PID=$!
 
 # A pid that is certainly not running.
@@ -52,10 +52,10 @@ reset_state() {
 }
 
 run_failsafe() {
-    LIDAWAKE_STATE_DIR="$TMP/state" \
-    LIDAWAKE_LOG="$TMP/log" \
-    LIDAWAKE_PMSET="$TMP/pmset" \
-    LIDAWAKE_STALE_SECONDS=60 \
+    LIDNAP_STATE_DIR="$TMP/state" \
+    LIDNAP_LOG="$TMP/log" \
+    LIDNAP_PMSET="$TMP/pmset" \
+    LIDNAP_STALE_SECONDS=60 \
     FAKE_PMSET_CALLS="$TMP/calls" \
     FAKE_PMSET_STATUS="${1:-0}" \
     bash failsafe.sh
@@ -65,7 +65,7 @@ run_failsafe() {
 restored() { [ "$(cat "$TMP/calls" 2>/dev/null)" = "-a disablesleep 0" ]; }
 untouched() { [ ! -e "$TMP/calls" ]; }
 
-# 1. No marker: the app never enabled lid-awake (or the user set it manually).
+# 1. No marker: the app never enabled closed-lid mode (or the user set it manually).
 reset_state
 run_failsafe
 check 'untouched && [ $STATUS -eq 0 ]' "no marker leaves pmset untouched"

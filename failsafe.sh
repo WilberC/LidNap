@@ -1,8 +1,8 @@
 #!/bin/bash
-# LidAwake fail-safe. Run every few seconds by a LaunchAgent
-# (~/Library/LaunchAgents/com.wilberc.lidawake.failsafe.plist).
+# LidNap fail-safe. Run every few seconds by a LaunchAgent
+# (~/Library/LaunchAgents/com.wilberc.lidnap.failsafe.plist).
 #
-# While LidAwake keeps the Mac awake it writes its pid to "$STATE/active" and
+# While LidNap keeps the Mac awake it writes its pid to "$STATE/active" and
 # touches "$STATE/heartbeat" regularly. If the app is no longer running, or the
 # heartbeat is stale (the app hung), this script restores normal sleep with
 # `pmset -a disablesleep 0` and clears the marker.
@@ -11,9 +11,9 @@
 # outside the app is never touched.
 set -u
 
-STATE="${LIDAWAKE_STATE_DIR:-$HOME/Library/Application Support/LidAwake}"
-LOG="${LIDAWAKE_LOG:-$HOME/Library/Logs/LidAwake.log}"
-STALE_SECONDS="${LIDAWAKE_STALE_SECONDS:-60}"
+STATE="${LIDNAP_STATE_DIR:-$HOME/Library/Application Support/LidNap}"
+LOG="${LIDNAP_LOG:-$HOME/Library/Logs/LidNap.log}"
+STALE_SECONDS="${LIDNAP_STALE_SECONDS:-60}"
 MARKER="$STATE/active"
 HEARTBEAT="$STATE/heartbeat"
 
@@ -22,8 +22,8 @@ log() {
 }
 
 restore_sleep() {
-    if [ -n "${LIDAWAKE_PMSET:-}" ]; then
-        "$LIDAWAKE_PMSET" -a disablesleep 0
+    if [ -n "${LIDNAP_PMSET:-}" ]; then
+        "$LIDNAP_PMSET" -a disablesleep 0
     else
         /usr/bin/sudo -n /usr/bin/pmset -a disablesleep 0
     fi
@@ -38,7 +38,7 @@ if ! [[ "$pid" =~ ^[0-9]+$ ]]; then
     reason="invalid marker"
 else
     command=$(ps -p "$pid" -o comm= 2>/dev/null)
-    if [ "$(basename "${command:-none}")" != "LidAwake" ]; then
+    if [ "$(basename "${command:-none}")" != "LidNap" ]; then
         reason="app not running"
     elif [ ! -f "$HEARTBEAT" ]; then
         reason="app unresponsive"

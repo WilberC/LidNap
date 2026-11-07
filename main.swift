@@ -9,7 +9,7 @@ func DisplayServicesGetBrightness(_ display: UInt32, _ brightness: UnsafeMutable
 @_silgen_name("DisplayServicesSetBrightness")
 func DisplayServicesSetBrightness(_ display: UInt32, _ brightness: Float) -> Int32
 
-let setupCommand = "sudo sh -c 'f=$(mktemp); echo \"\(NSUserName()) ALL=(ALL) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\" > \"$f\"; visudo -cf \"$f\" && install -m 440 \"$f\" /etc/sudoers.d/lid-awake && echo INSTALLED'"
+let setupCommand = "sudo sh -c 'f=$(mktemp); echo \"\(NSUserName()) ALL=(ALL) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\" > \"$f\"; visudo -cf \"$f\" && install -m 440 \"$f\" /etc/sudoers.d/lidnap && echo INSTALLED'"
 
 /// Reads the current power source and battery level through IOKit.
 func currentPowerSnapshot() -> PowerSnapshot {
@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
 
         toggleItem.title = "Keep Awake When Lid Is Closed"
-        toggleItem.action = #selector(toggleLidAwake)
+        toggleItem.action = #selector(toggleKeepAwake)
         toggleItem.target = self
         menu.addItem(toggleItem)
 
@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
-        let quitItem = NSMenuItem(title: "Quit Lid Awake", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: "Quit LidNap", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quitItem)
 
         statusItem.menu = menu
@@ -113,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // Quitting always hands sleep control back to macOS.
         if session.isActive {
-            disableLidAwake(reason: "app quit")
+            disableKeepAwake(reason: "app quit")
         }
     }
 
@@ -180,7 +180,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                   previous: lastPower, current: current)
         lastPower = current
         guard let trip else { return }
-        disableLidAwake(reason: "guard: \(trip.message)")
+        disableKeepAwake(reason: "guard: \(trip.message)")
         lastTrip = trip
         refreshUI()
     }
@@ -258,7 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func logEvent(_ message: String) {
         let url = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Logs/LidAwake.log")
+            .appendingPathComponent("Library/Logs/LidNap.log")
         let stamp = ISO8601DateFormatter().string(from: Date())
         guard let data = "\(stamp) \(message)\n".data(using: .utf8) else { return }
         if let handle = try? FileHandle(forWritingTo: url) {
@@ -369,7 +369,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
     }
 
-    private func isLidAwakeOn() -> Bool {
+    private func isSleepDisabled() -> Bool {
         let (_, output) = runProcess("/usr/bin/pmset", ["-g"])
         for line in output.split(separator: "\n") where line.contains("SleepDisabled") {
             return line.trimmingCharacters(in: .whitespaces).hasSuffix("1")
@@ -383,12 +383,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return status == 0
     }
 
-    private func enableLidAwake() {
+    private func enableKeepAwake() {
         // Refuse to start when a guard would trip right away.
         let power = currentPowerSnapshot()
         if let trip = evaluateGuards(settings: settings, activatedAt: Date(), now: Date(),
                                      previous: nil, current: power) {
-            showInfoAlert(title: "Lid Awake Not Enabled",
+            showInfoAlert(title: "LidNap Not Enabled",
                           message: "\(trip.message) Change the safety guards or connect the charger first.")
             return
         }
@@ -396,7 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try session.activate()
         } catch {
             logEvent("enable: could not write fail-safe marker: \(error.localizedDescription)")
-            showInfoAlert(title: "Lid Awake Not Enabled",
+            showInfoAlert(title: "LidNap Not Enabled",
                           message: "The fail-safe marker could not be written, so the Mac was left unchanged.")
             return
         }
@@ -406,30 +406,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         startGuards()
-        logEvent("enabled lid-awake")
+        logEvent("enabled closed-lid mode")
     }
 
-    private func disableLidAwake(reason: String) {
+    private func disableKeepAwake(reason: String) {
         stopGuards()
         if setDisableSleep(false) {
             session.clear()
-            logEvent("disabled lid-awake (\(reason))")
+            logEvent("disabled closed-lid mode (\(reason))")
         } else {
             // Keep the marker so the fail-safe agent keeps retrying.
             logEvent("disable failed (\(reason)); fail-safe will retry")
         }
     }
 
-    @objc private func toggleLidAwake() {
-        if isLidAwakeOn() {
+    @objc private func toggleKeepAwake() {
+        if isSleepDisabled() {
             if session.isActive {
-                disableLidAwake(reason: "user")
+                disableKeepAwake(reason: "user")
             } else if !setDisableSleep(false) {
                 // Turned on outside the app; turn it off without a marker.
                 showSetupAlert()
             }
         } else {
-            enableLidAwake()
+            enableKeepAwake()
         }
         refreshUI()
     }
@@ -441,7 +441,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ? ["cup.and.saucer.fill", "moon.fill", "sun.max.fill"]
             : ["cup.and.saucer", "moon.zzz", "moon"]
         for name in candidates {
-            if let image = NSImage(systemSymbolName: name, accessibilityDescription: "Lid Awake") {
+            if let image = NSImage(systemSymbolName: name, accessibilityDescription: "LidNap") {
                 image.isTemplate = true
                 return image
             }
@@ -450,11 +450,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func refreshUI() {
-        let on = isLidAwakeOn()
+        let on = isSleepDisabled()
         statusItem.button?.image = statusImage(on: on)
         statusItem.button?.toolTip = on
-            ? "Lid Awake: on. The Mac keeps running with the lid closed."
-            : "Lid Awake: off. Closing the lid sleeps the Mac normally."
+            ? "LidNap: on. The Mac keeps running with the lid closed."
+            : "LidNap: off. Closing the lid sleeps the Mac normally."
         toggleItem.state = on ? .on : .off
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
 
@@ -463,7 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusLineItem.title = "Turns off in \(formatDuration(remaining))"
             statusLineItem.isHidden = false
         } else if on, !session.isActive {
-            statusLineItem.title = "Enabled outside Lid Awake: no safety guards"
+            statusLineItem.title = "Enabled outside LidNap: no safety guards"
             statusLineItem.isHidden = false
         } else if !on, let lastTrip {
             statusLineItem.title = "Turned off: \(lastTrip.message)"
@@ -506,7 +506,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.alertStyle = .informational
         alert.messageText = "One-Time Setup Needed"
-        alert.informativeText = "Lid Awake needs permission to change the sleep setting without asking for your password every time.\n\nClick \u{201C}Copy Command\u{201D}, paste it into Terminal, enter your password once, then use the toggle again."
+        alert.informativeText = "LidNap needs permission to change the sleep setting without asking for your password every time.\n\nClick \u{201C}Copy Command\u{201D}, paste it into Terminal, enter your password once, then use the toggle again."
         alert.addButton(withTitle: "Copy Command")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)

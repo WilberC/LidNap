@@ -1,11 +1,11 @@
 #!/bin/bash
-# Builds LidAwake.app, installs it into ~/Applications and (re)loads the
+# Builds LidNap.app, installs it into ~/Applications and (re)loads the
 # fail-safe LaunchAgent.
 set -e
 cd "$(dirname "$0")"
 
-APP="$HOME/Applications/LidAwake.app"
-AGENT_LABEL="com.wilberc.lidawake.failsafe"
+APP="$HOME/Applications/LidNap.app"
+AGENT_LABEL="com.wilberc.lidnap.failsafe"
 AGENT="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -14,7 +14,7 @@ cp main.swift Guards.swift Session.swift "$APP/Contents/Resources/"
 cp setup-permissions.sh failsafe.sh "$APP/Contents/Resources/"
 cp assets/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-swiftc -O -o "$APP/Contents/MacOS/LidAwake" main.swift Guards.swift Session.swift \
+swiftc -O -o "$APP/Contents/MacOS/LidNap" main.swift Guards.swift Session.swift \
     -F /System/Library/PrivateFrameworks -framework DisplayServices
 
 codesign --force --sign - "$APP"

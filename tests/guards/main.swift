@@ -88,7 +88,7 @@ check(evaluate(now: t0.addingTimeInterval(5 * 3600), previous: ac, current: lowB
       "unplug has priority")
 
 // S5 persistence: settings round-trip through UserDefaults, and garbage falls back to defaults.
-let suite = "lidawake.tests.\(UUID().uuidString)"
+let suite = "lidnap.tests.\(UUID().uuidString)"
 let store = UserDefaults(suiteName: suite)!
 var custom = GuardSettings()
 custom.batteryEnabled = false

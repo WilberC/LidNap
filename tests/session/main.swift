@@ -1,5 +1,5 @@
 // Tests for SessionMarker and formatDuration. The binary is built as
-// "LidAwake" so the contract test can run failsafe.sh against a real marker
+// "LidNap" so the contract test can run failsafe.sh against a real marker
 // written by this process. Run with: ./tests/run.sh
 import Foundation
 
@@ -16,7 +16,7 @@ func check(_ condition: Bool, _ name: String, file: String = #file, line: Int = 
 }
 
 let fm = FileManager.default
-let tmp = fm.temporaryDirectory.appendingPathComponent("lidawake-session-\(UUID().uuidString)")
+let tmp = fm.temporaryDirectory.appendingPathComponent("lidnap-session-\(UUID().uuidString)")
 defer { try? fm.removeItem(at: tmp) }
 let stateDir = tmp.appendingPathComponent("state")
 
@@ -42,7 +42,7 @@ marker.beat()
 let beaten = (try? fm.attributesOfItem(atPath: marker.heartbeatURL.path)[.modificationDate] as? Date) ?? old
 check(beaten.timeIntervalSinceNow > -5, "beat refreshes the heartbeat")
 
-// Contract with failsafe.sh: a marker written by a live "LidAwake" process
+// Contract with failsafe.sh: a marker written by a live "LidNap" process
 // with a fresh heartbeat is left alone; after clear(), nothing happens either.
 let fakePmset = tmp.appendingPathComponent("pmset")
 let calls = tmp.appendingPathComponent("calls")
@@ -54,9 +54,9 @@ func runFailsafe() -> Int32 {
     process.executableURL = URL(fileURLWithPath: "/bin/bash")
     process.arguments = ["failsafe.sh"]
     var env = ProcessInfo.processInfo.environment
-    env["LIDAWAKE_STATE_DIR"] = stateDir.path
-    env["LIDAWAKE_LOG"] = tmp.appendingPathComponent("log").path
-    env["LIDAWAKE_PMSET"] = fakePmset.path
+    env["LIDNAP_STATE_DIR"] = stateDir.path
+    env["LIDNAP_LOG"] = tmp.appendingPathComponent("log").path
+    env["LIDNAP_PMSET"] = fakePmset.path
     process.environment = env
     try? process.run()
     process.waitUntilExit()
@@ -71,7 +71,7 @@ check(!marker.isActive && !fm.fileExists(atPath: marker.heartbeatURL.path), "cle
 check(runFailsafe() == 0 && !fm.fileExists(atPath: calls.path), "failsafe ignores a cleared session")
 
 // The default directory is the one failsafe.sh uses by default.
-check(SessionMarker().directory.path.hasSuffix("Library/Application Support/LidAwake"),
+check(SessionMarker().directory.path.hasSuffix("Library/Application Support/LidNap"),
       "default state directory matches failsafe.sh")
 
 print("\(passed) passed, \(failures) failed")

@@ -7,7 +7,7 @@ struct SessionMarker {
     let directory: URL
 
     init(directory: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Application Support/LidAwake")) {
+        .appendingPathComponent("Library/Application Support/LidNap")) {
         self.directory = directory
     }
 

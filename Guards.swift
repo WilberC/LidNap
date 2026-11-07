@@ -6,10 +6,10 @@ struct GuardSettings: Codable, Equatable {
     static let storageKey = "guardSettings"
 
     var batteryEnabled = true
-    /// Turn lid-awake off when on battery at or below this percentage.
+    /// Turn closed-lid mode off when on battery at or below this percentage.
     var batteryThreshold = 20
     var timeEnabled = true
-    /// Turn lid-awake off after this many seconds since it was enabled.
+    /// Turn closed-lid mode off after this many seconds since it was enabled.
     var maxDuration: TimeInterval = 4 * 3600
     var unplugEnabled = true
 
@@ -34,7 +34,7 @@ struct PowerSnapshot: Equatable {
     var batteryPercent: Int?
 }
 
-/// Why a guard turned lid-awake off.
+/// Why a guard turned closed-lid mode off.
 enum GuardTrip: Equatable {
     case unplugged
     case lowBattery(Int)
@@ -50,7 +50,7 @@ enum GuardTrip: Equatable {
 }
 
 /// Pure decision function: returns the first guard that should turn
-/// lid-awake off, or nil to keep it on.
+/// closed-lid mode off, or nil to keep it on.
 func evaluateGuards(
     settings: GuardSettings,
     activatedAt: Date,
