@@ -136,12 +136,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lastPower = currentPowerSnapshot()
         lastTrip = nil
 
-        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
+        // Common run loop modes keep both timers firing while the menu is open;
+        // otherwise the heartbeat would go stale and trip the fail-safe.
+        let heartbeat = Timer(timeInterval: 15, repeats: true) { [weak self] _ in
             self?.session.beat()
         }
-        guardTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        let guards = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             self?.checkGuards()
         }
+        RunLoop.main.add(heartbeat, forMode: .common)
+        RunLoop.main.add(guards, forMode: .common)
+        heartbeatTimer = heartbeat
+        guardTimer = guards
 
         // React to charger and battery changes immediately.
         let context = Unmanaged.passUnretained(self).toOpaque()
@@ -149,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let context else { return }
             Unmanaged<AppDelegate>.fromOpaque(context).takeUnretainedValue().checkGuards()
         }, context)?.takeRetainedValue() {
-            CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
             powerSource = source
         }
     }
@@ -160,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guardTimer?.invalidate()
         guardTimer = nil
         if let source = powerSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .defaultMode)
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             powerSource = nil
         }
         activatedAt = nil
