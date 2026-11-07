@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-line installer for LidAwake:
-#   curl -fsSL https://raw.githubusercontent.com/deezeddd/LidAwake-Mac/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/WilberC/LidAwake-Mac/main/install.sh | bash
 # Downloads the source, builds it locally (a few seconds), installs to ~/Applications.
 set -e
 
@@ -15,13 +15,14 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 echo "Downloading LidAwake..."
-curl -fsSL https://github.com/deezeddd/LidAwake-Mac/archive/refs/heads/main.tar.gz | tar -xz -C "$TMP" --strip-components=1
+curl -fsSL https://github.com/WilberC/LidAwake-Mac/archive/refs/heads/main.tar.gz | tar -xz -C "$TMP" --strip-components=1
 
 cd "$TMP"
 ./build.sh
 
 echo
 echo "Installed: ~/Applications/LidAwake.app"
+echo "Fail-safe agent: ~/Library/LaunchAgents/com.wilberc.lidawake.failsafe.plist"
 echo
 echo "Recommended one-time step (lets the toggle work without a password prompt):"
 echo "  bash ~/Applications/LidAwake.app/Contents/Resources/setup-permissions.sh"
