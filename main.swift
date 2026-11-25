@@ -303,6 +303,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func releaseDisplayAssertion() {
         activityTimer?.invalidate()
         activityTimer = nil
+        // The declared user activity is its own assertion; release it too so
+        // idle display sleep and lock resume right away.
+        if userActivityAssertion != 0 {
+            IOPMAssertionRelease(userActivityAssertion)
+            userActivityAssertion = 0
+        }
         guard let id = displayAssertion else { return }
         IOPMAssertionRelease(id)
         displayAssertion = nil
