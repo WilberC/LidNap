@@ -70,6 +70,7 @@ open ~/Applications/LidNap.app
 | **Keep Awake When Lid Is Closed** | Toggles closed-lid mode. Checkmark and filled cup when active. |
 | *Status line* | Shows the time left, why a guard turned closed-lid mode off, or a warning when it was enabled outside the app. |
 | **Safety Guards ▸** | Switch each guard on or off and pick its value (see below). |
+| **Prevent Screen Lock While Lid Is Closed** | Off by default. While closed-lid mode is on and the lid is closed, keeps the display awake at brightness 0 so macOS never starts the screen saver or locks the screen on idle. See the warning below. |
 | **Start at Login** | Registers or unregisters the app as a login item. |
 | **Quit LidNap** | Quits the app and restores normal sleep if the app had enabled closed-lid mode. |
 
@@ -86,6 +87,12 @@ Settings persist across launches. If a guard would trip immediately (for example
 > [!WARNING]
 > While the toggle is ON, the Mac will not sleep for **any** reason except the safety guards above, including inside a bag. Keep the guards on, and toggle it off before you pack up. A lid-closed laptop also dissipates heat worse, so AC power is best.
 
+> [!NOTE]
+> Unless the option below is on, macOS still turns the display off after the **Turn display off** idle time with the lid closed and locks the screen at that moment (System Settings ▸ Lock Screen). Background work keeps running while it is locked; you only have to unlock when you open the lid.
+
+> [!CAUTION]
+> **Prevent Screen Lock While Lid Is Closed** means anyone who opens the lid, or looks at an external display connected to it, gets an unlocked Mac. The assertions are released within 2 s of the lid opening, closed-lid mode turns off or the app quits, so idle lock works normally again from then on.
+
 ## How it works
 
 | Piece | Mechanism |
@@ -93,6 +100,7 @@ Settings persist across launches. If a guard would trip immediately (for example
 | Sleep toggle | Apple's supported `pmset disablesleep` flag, flipped via `sudo -n`. No kernel extensions, no SIP changes, no hacks. |
 | Lid detection | Closing the lid does not fire a display-sleep notification; macOS disconnects the built-in display entirely. LidNap polls the `AppleClamshellState` property of `IOPMrootDomain` every 2 seconds to catch lid transitions reliably. |
 | Fail-safe | While closed-lid mode is on, the app writes its pid to `~/Library/Application Support/LidNap/active` and touches a `heartbeat` file every 15 s. The LaunchAgent `com.wilberc.lidnap.failsafe` runs `failsafe.sh` at login and every 10 s: if the marker exists but the `LidNap` process is gone or the heartbeat is older than 60 s, it runs `pmset -a disablesleep 0` and removes the marker. Without a marker it does nothing, so a value you set manually with `pmset` is never touched. The app also restores sleep on launch if it finds a marker left by a previous run. |
+| Screen lock | When enabled, a `PreventUserIdleDisplaySleep` power assertion (`IOPMAssertionCreateWithName`) is held only while closed-lid mode is on and the lid is closed, and `IOPMAssertionDeclareUserActivity` resets the idle timer every 30 s so the screen saver does not start either. macOS releases both automatically if the app dies. |
 | Guards | Power changes come from `IOPSNotificationCreateRunLoopSource`, so unplugging is handled instantly; battery and time limits are also checked every 30 s. The decision logic is a pure function in `Guards.swift`, covered by `tests/run.sh`. |
 | Brightness | The private `DisplayServices` framework (`DisplayServicesGetBrightness` / `SetBrightness`), the same API used by [MonitorControl](https://github.com/MonitorControl/MonitorControl). The saved level lives in `UserDefaults` with a no-overwrite guard, so a crash between close and open never loses your original brightness. |
 

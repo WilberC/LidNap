@@ -1,6 +1,7 @@
 import Cocoa
 import IOKit
 import IOKit.ps
+import IOKit.pwr_mgt
 import ServiceManagement
 
 @_silgen_name("DisplayServicesGetBrightness")
@@ -54,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let timeToggleItem = NSMenuItem()
     private let timeLimitItem = NSMenuItem()
     private let unplugToggleItem = NSMenuItem()
+    private let screenLockItem = NSMenuItem()
+    private var displayAssertion: IOPMAssertionID?
+    private var userActivityAssertion = IOPMAssertionID(0)
+    private var activityTimer: Timer?
 
     static let batteryChoices = [10, 15, 20, 25, 30, 40, 50]
     static let durationChoices: [TimeInterval] = [30 * 60, 3600, 2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600]
@@ -78,6 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let guardsItem = NSMenuItem(title: "Safety Guards", action: nil, keyEquivalent: "")
         guardsItem.submenu = buildGuardsMenu()
         menu.addItem(guardsItem)
+
+        screenLockItem.title = "Prevent Screen Lock While Lid Is Closed"
+        screenLockItem.action = #selector(togglePreventScreenLock)
+        screenLockItem.target = self
+        menu.addItem(screenLockItem)
 
         loginItem.title = "Start at Login"
         loginItem.action = #selector(toggleStartAtLogin)
@@ -112,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         // Quitting always hands sleep control back to macOS.
+        releaseDisplayAssertion()
         if session.isActive {
             disableKeepAwake(reason: "app quit")
         }
@@ -237,6 +248,73 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         checkGuards()
     }
 
+    @objc private func togglePreventScreenLock() {
+        updateSettings { $0.preventScreenLock.toggle() }
+        updateDisplayAssertion()
+    }
+
+    // MARK: - Screen lock prevention
+
+    /// Holds a display-sleep assertion only while closed-lid mode is on, the
+    /// lid is closed and the option is enabled. The screen saver has its own
+    /// idle timer, so user activity is also declared every 30 s; together they
+    /// keep macOS from starting the screen saver or locking the screen on idle.
+    private func updateDisplayAssertion() {
+        let wanted = shouldPreventScreenLock(settings: settings,
+                                             keepAwakeActive: session.isActive,
+                                             lidClosed: lastClamshellClosed)
+        if wanted, displayAssertion == nil {
+            var id = IOPMAssertionID(0)
+            let result = IOPMAssertionCreateWithName(
+                kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
+                IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                "LidNap: prevent screen lock while the lid is closed" as CFString, &id)
+            if result == kIOReturnSuccess {
+                displayAssertion = id
+                declareUserActivity()
+                // Common modes keep it firing while the menu is open; each tick
+                // also re-checks the conditions in case state changed elsewhere.
+                let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+                    self?.updateDisplayAssertion()
+                    self?.declareUserActivity()
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                activityTimer = timer
+                logEvent("screen lock prevention on")
+            } else {
+                logEvent("screen lock prevention failed (\(result))")
+            }
+        } else if !wanted {
+            releaseDisplayAssertion()
+        }
+    }
+
+    /// Resets the system idle timer that drives the screen saver.
+    private func declareUserActivity() {
+        guard displayAssertion != nil else { return }
+        let result = IOPMAssertionDeclareUserActivity(
+            "LidNap: prevent screen saver while the lid is closed" as CFString,
+            kIOPMUserActiveLocal, &userActivityAssertion)
+        if result != kIOReturnSuccess {
+            logEvent("screen saver prevention failed (\(result))")
+        }
+    }
+
+    private func releaseDisplayAssertion() {
+        activityTimer?.invalidate()
+        activityTimer = nil
+        // The declared user activity is its own assertion; release it too so
+        // idle display sleep and lock resume right away.
+        if userActivityAssertion != 0 {
+            IOPMAssertionRelease(userActivityAssertion)
+            userActivityAssertion = 0
+        }
+        guard let id = displayAssertion else { return }
+        IOPMAssertionRelease(id)
+        displayAssertion = nil
+        logEvent("screen lock prevention off")
+    }
+
     @objc private func toggleBatteryGuard() { updateSettings { $0.batteryEnabled.toggle() } }
     @objc private func toggleTimeGuard() { updateSettings { $0.timeEnabled.toggle() } }
     @objc private func toggleUnplugGuard() { updateSettings { $0.unplugEnabled.toggle() } }
@@ -307,6 +385,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let closed = isClamshellClosed()
         if closed != lastClamshellClosed {
             lastClamshellClosed = closed
+            updateDisplayAssertion()
             if closed {
                 saveBrightnessAndZero(reason: "lid closed")
             } else {
@@ -407,10 +486,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         startGuards()
         logEvent("enabled closed-lid mode")
+        updateDisplayAssertion()
     }
 
     private func disableKeepAwake(reason: String) {
         stopGuards()
+        releaseDisplayAssertion()
         if setDisableSleep(false) {
             session.clear()
             logEvent("disabled closed-lid mode (\(reason))")
@@ -487,6 +568,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         unplugToggleItem.state = settings.unplugEnabled ? .on : .off
+        screenLockItem.state = settings.preventScreenLock ? .on : .off
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

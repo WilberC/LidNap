@@ -12,6 +12,24 @@ struct GuardSettings: Codable, Equatable {
     /// Turn closed-lid mode off after this many seconds since it was enabled.
     var maxDuration: TimeInterval = 4 * 3600
     var unplugEnabled = true
+    /// Keep the display awake (at brightness 0) while the lid is closed, so
+    /// idle display sleep never starts the screen saver or locks the screen.
+    var preventScreenLock = false
+
+    init() {}
+
+    // Settings saved before a field existed keep their values; missing fields
+    // take their defaults instead of discarding everything.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = GuardSettings()
+        batteryEnabled = try container.decodeIfPresent(Bool.self, forKey: .batteryEnabled) ?? defaults.batteryEnabled
+        batteryThreshold = try container.decodeIfPresent(Int.self, forKey: .batteryThreshold) ?? defaults.batteryThreshold
+        timeEnabled = try container.decodeIfPresent(Bool.self, forKey: .timeEnabled) ?? defaults.timeEnabled
+        maxDuration = try container.decodeIfPresent(TimeInterval.self, forKey: .maxDuration) ?? defaults.maxDuration
+        unplugEnabled = try container.decodeIfPresent(Bool.self, forKey: .unplugEnabled) ?? defaults.unplugEnabled
+        preventScreenLock = try container.decodeIfPresent(Bool.self, forKey: .preventScreenLock) ?? defaults.preventScreenLock
+    }
 
     static func load(from defaults: UserDefaults = .standard) -> GuardSettings {
         guard let data = defaults.data(forKey: storageKey),
@@ -25,6 +43,11 @@ struct GuardSettings: Codable, Equatable {
             defaults.set(data, forKey: GuardSettings.storageKey)
         }
     }
+}
+
+/// Whether the display-sleep assertion that avoids the screen lock should be held.
+func shouldPreventScreenLock(settings: GuardSettings, keepAwakeActive: Bool, lidClosed: Bool) -> Bool {
+    settings.preventScreenLock && keepAwakeActive && lidClosed
 }
 
 /// A point-in-time view of the power source.
