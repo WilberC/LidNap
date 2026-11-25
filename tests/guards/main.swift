@@ -102,6 +102,33 @@ store.set(Data("garbage".utf8), forKey: GuardSettings.storageKey)
 check(GuardSettings.load(from: store) == GuardSettings(), "corrupt settings fall back to defaults")
 store.removePersistentDomain(forName: suite)
 
+// Prevent screen lock: off by default, persisted, and settings saved before
+// the option existed keep their values.
+check(GuardSettings().preventScreenLock == false, "prevent screen lock is off by default")
+var locking = GuardSettings()
+locking.preventScreenLock = true
+locking.batteryThreshold = 30
+locking.save(to: store)
+check(GuardSettings.load(from: store) == locking, "prevent screen lock round-trips")
+let legacy = #"{"batteryEnabled":false,"batteryThreshold":40,"timeEnabled":true,"maxDuration":3600,"unplugEnabled":false}"#
+store.set(Data(legacy.utf8), forKey: GuardSettings.storageKey)
+var expectedLegacy = GuardSettings()
+expectedLegacy.batteryEnabled = false
+expectedLegacy.batteryThreshold = 40
+expectedLegacy.maxDuration = 3600
+expectedLegacy.unplugEnabled = false
+check(GuardSettings.load(from: store) == expectedLegacy, "settings saved before the option keep their values")
+store.removePersistentDomain(forName: suite)
+
+// The display is kept awake only while closed-lid mode is on, the lid is
+// closed and the option is enabled.
+var lockOn = GuardSettings()
+lockOn.preventScreenLock = true
+check(shouldPreventScreenLock(settings: lockOn, keepAwakeActive: true, lidClosed: true), "prevents lock when all conditions hold")
+check(!shouldPreventScreenLock(settings: lockOn, keepAwakeActive: true, lidClosed: false), "no prevention with the lid open")
+check(!shouldPreventScreenLock(settings: lockOn, keepAwakeActive: false, lidClosed: true), "no prevention when closed-lid mode is off")
+check(!shouldPreventScreenLock(settings: GuardSettings(), keepAwakeActive: true, lidClosed: true), "no prevention when the option is off")
+
 // Descriptions shown to the user.
 check(GuardTrip.lowBattery(15).message == "Battery dropped to 15 %.", "low battery message")
 check(GuardTrip.timeLimit.message == "The maximum duration was reached.", "time limit message")
