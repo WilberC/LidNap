@@ -57,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let unplugToggleItem = NSMenuItem()
     private let screenLockItem = NSMenuItem()
     private var displayAssertion: IOPMAssertionID?
+    private var userActivityAssertion = IOPMAssertionID(0)
+    private var activityTimer: Timer?
 
     static let batteryChoices = [10, 15, 20, 25, 30, 40, 50]
     static let durationChoices: [TimeInterval] = [30 * 60, 3600, 2 * 3600, 4 * 3600, 8 * 3600, 12 * 3600]
@@ -254,8 +256,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Screen lock prevention
 
     /// Holds a display-sleep assertion only while closed-lid mode is on, the
-    /// lid is closed and the option is enabled. Without display sleep, macOS
-    /// never starts the screen saver or locks the screen on idle.
+    /// lid is closed and the option is enabled. The screen saver has its own
+    /// idle timer, so user activity is also declared every 30 s; together they
+    /// keep macOS from starting the screen saver or locking the screen on idle.
     private func updateDisplayAssertion() {
         let wanted = shouldPreventScreenLock(settings: settings,
                                              keepAwakeActive: session.isActive,
@@ -268,6 +271,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 "LidNap: prevent screen lock while the lid is closed" as CFString, &id)
             if result == kIOReturnSuccess {
                 displayAssertion = id
+                declareUserActivity()
+                // Common modes keep it firing while the menu is open; each tick
+                // also re-checks the conditions in case state changed elsewhere.
+                let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+                    self?.updateDisplayAssertion()
+                    self?.declareUserActivity()
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                activityTimer = timer
                 logEvent("screen lock prevention on")
             } else {
                 logEvent("screen lock prevention failed (\(result))")
@@ -277,7 +289,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Resets the system idle timer that drives the screen saver.
+    private func declareUserActivity() {
+        guard displayAssertion != nil else { return }
+        let result = IOPMAssertionDeclareUserActivity(
+            "LidNap: prevent screen saver while the lid is closed" as CFString,
+            kIOPMUserActiveLocal, &userActivityAssertion)
+        if result != kIOReturnSuccess {
+            logEvent("screen saver prevention failed (\(result))")
+        }
+    }
+
     private func releaseDisplayAssertion() {
+        activityTimer?.invalidate()
+        activityTimer = nil
         guard let id = displayAssertion else { return }
         IOPMAssertionRelease(id)
         displayAssertion = nil
